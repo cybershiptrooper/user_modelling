@@ -34,10 +34,12 @@ def load_gemma_saes(
     params: Literal["2b", "9b"],
     layers: list[int],
     width: int = 16,
+    instruction_tuned: bool = False,
     type: Literal["res", "mlp", "attn"] = "res",
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
     dtype: torch.dtype = torch.float32,
 ) -> dict[int, sl.SAE]:
+    params = params + "-it" if instruction_tuned else params
     release = f"gemma-scope-{params}-pt-{type}-canonical"
     saes = {}
     for layer in layers:

@@ -12,6 +12,9 @@ lint:
 
 .PHONY: install
 install:
+	# remove poetry virtual environment if it exists
+	poetry env remove --all
+	poetry config virtualenvs.in-project true
 	poetry install
 	poetry run pip-compile
 

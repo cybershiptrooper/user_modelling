@@ -2,13 +2,20 @@ all: lint test
 
 .PHONY: test
 test:
-	pytest
+	@if command -v poetry >/dev/null 2>&1; then \
+		poetry run pytest; \
+	else \
+		pytest; \
+	fi
 	make lint
 
 .PHONY: lint
 lint:
-	ruff format
-	ruff check
+	@if command -v poetry >/dev/null 2>&1; then \
+		poetry run ruff format && poetry run ruff check; \
+	else \
+		ruff format && ruff check; \
+	fi
 
 .PHONY: install
 install:

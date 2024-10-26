@@ -26,3 +26,6 @@ pip = "^24.2"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+exclude = ["*.ipynb"]

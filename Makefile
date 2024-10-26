@@ -3,6 +3,7 @@ all: lint test
 .PHONY: test
 test:
 	pytest
+	make lint
 
 .PHONY: lint
 lint:

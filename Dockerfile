@@ -27,5 +27,5 @@ ENV VIRTUAL_ENV=/user_modelling/.venv \
 
 COPY . /user_modelling
 
-ENTRYPOINT ["python", "main.py"]
-# ENTRYPOINT ["/bin/bash"]
+# ENTRYPOINT ["python", "main.py"]
+ENTRYPOINT ["/bin/bash"]

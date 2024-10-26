@@ -1,3 +1,4 @@
+# ruff: noqa
 import torch
 import numpy as np
 import einops
@@ -6,6 +7,11 @@ from IPython.display import display, HTML
 import pandas as pd
 from utils.neel_plotly import *
 import inspect
+import argparse
+from IPython import get_ipython
+import json
+from html import escape
+import colorsys
 
 SPACE = "·"
 NEWLINE = "↩"
@@ -62,17 +68,13 @@ def create_vocab_df(logit_vec, make_probs=False, full_vocab=None, model=None):
 
 
 def cos(x, y):
-    return (einops.einsum(x, y, "... a, ... a -> ...")) / x.norm(dim=-1) / y.norm(dim=-1)
+    return (
+        (einops.einsum(x, y, "... a, ... a -> ...")) / x.norm(dim=-1) / y.norm(dim=-1)
+    )
 
 
 def show_df(df):
     display(df.style.background_gradient("coolwarm"))
-
-
-from html import escape
-import colorsys
-
-from IPython.display import display
 
 
 def create_html(
@@ -138,7 +140,6 @@ def add_to_df(df, name, tensor):
 
 
 def get_induction_scores(model, make_plot=False, batch_size=4, ind_seq_len=200):
-
     rand_tokens_vocab = torch.tensor(
         [i for i in range(1000, 10000) if "  " not in model.to_string(i)]
     ).cuda()
@@ -214,7 +215,9 @@ def make_token_df(tokens, len_prefix=5, len_suffix=1, model=None):
     if model is None:
         model = get_variable_from_caller("model")
     str_tokens = [model.to_str_tokens(t) for t in tokens]
-    unique_token = [[f"{s}/{i}" for i, s in enumerate(str_tok)] for str_tok in str_tokens]
+    unique_token = [
+        [f"{s}/{i}" for i, s in enumerate(str_tok)] for str_tok in str_tokens
+    ]
 
     context = []
     batch = []
@@ -293,9 +296,6 @@ def plot_line_and_df(
 
 
 # %%
-import argparse
-from IPython import get_ipython
-import json
 
 
 def arg_parse_update_cfg(default_cfg):

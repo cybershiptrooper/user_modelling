@@ -1,3 +1,4 @@
+# ruff: noqa
 # Import stuff
 import torch
 import numpy as np

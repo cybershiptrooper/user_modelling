@@ -1,18 +1,18 @@
 import torch
-from transformer_lens import HookedTransformer, ActivationCache
+from transformer_lens import ActivationCache
 from sae_lens import SAE
 import pandas as pd
 from jaxtyping import Float
 
 
 def compute_sae_activations_and_attributions(
-    model: HookedTransformer,
     saes: list[SAE],
     fwd_cache: ActivationCache | dict,
     bwd_cache: ActivationCache | dict,
     hook_points: list[str],
 ):
-    all_layers = list(range(model.cfg.n_layers))
+    all_layers = list(range(len(saes)))
+    assert len(hook_points) == len(saes), "hook_points must be the same length as saes"
     residual_streams = torch.stack(
         [fwd_cache[hook_points[layer]].squeeze(0) for layer in all_layers]
     )
@@ -69,6 +69,7 @@ def get_top_changes_in_latent_contributions(
     per_latent_contribution_after: Float[torch.Tensor, "batch layer pos d_sae"],  # noqa: F722
     top_k: int = 5,
     absolute: bool = True,
+    normalize: bool = False,
 ):
     results = []
     for layer in range(per_latent_contribution_before.shape[0]):
@@ -78,6 +79,12 @@ def get_top_changes_in_latent_contributions(
         change_in_contributions = (
             latent_contributions_after - latent_contributions_before
         )
+        if normalize:
+            change_in_contributions /= (
+                latent_contributions_before.abs()
+                + latent_contributions_after.abs()
+                + 1e-8
+            ) / 2
         abs_change_in_contributions = change_in_contributions.abs()
         if absolute:
             top_k_changes = abs_change_in_contributions.topk(top_k).indices.tolist()
@@ -90,7 +97,9 @@ def get_top_changes_in_latent_contributions(
                     "layer": layer,
                     "change": change_in_contributions[latent_idx].item(),
                     "abs_change": abs_change_in_contributions[latent_idx].item(),
-                    "contribution_before": latent_contributions_before[latent_idx].item(),
+                    "contribution_before": latent_contributions_before[
+                        latent_idx
+                    ].item(),
                     "contribution_after": latent_contributions_after[latent_idx].item(),
                 }
             )

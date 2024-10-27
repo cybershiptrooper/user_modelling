@@ -1,19 +1,29 @@
 import sae_lens as sl
-import yaml
-from pathlib import Path
 from typing import Literal
 import torch
+from sae_lens.toolkit.pretrained_saes_directory import get_pretrained_saes_directory
+from tabulate import tabulate
 
 
-def view_sae_yaml():
+def get_sae_yaml() -> dict:
     """
     View the sae_lens pretrained saes yaml file as a dictionary.
     """
-    root_dir = Path(sl.__file__).parent
-    sae_path = root_dir / "pretrained_saes.yaml"
-    with open(sae_path, "r") as f:
-        sae_dict = yaml.safe_load(f)
-    return sae_dict
+    return get_pretrained_saes_directory()
+
+
+def view_sae_yaml() -> None:
+    metadata_rows = [
+        [data.model, data.release, data.repo_id, len(data.saes_map)]
+        for data in get_pretrained_saes_directory().values()
+    ]
+    print(
+        tabulate(
+            metadata_rows,
+            headers=["model", "release", "repo_id", "n_saes"],
+            tablefmt="simple_outline",
+        )
+    )
 
 
 def load_sae_id(

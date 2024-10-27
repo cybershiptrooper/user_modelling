@@ -13,10 +13,10 @@ def logit_diff_metric(
 
 
 def logits_to_ave_logit_diff(
-    logits: Float[torch.Tensor, "batch seq d_vocab"],
-    answer_tokens: Float[torch.Tensor, "batch 2"],
+    logits: Float[torch.Tensor, "batch seq d_vocab"],  # noqa
+    answer_tokens: Float[torch.Tensor, "batch 2"],  # noqa
     per_prompt: bool = False,
-) -> Float[torch.Tensor, "*batch"]:
+) -> torch.Tensor:
     """
     Returns logit difference between the correct and incorrect answer.
 
@@ -24,9 +24,9 @@ def logits_to_ave_logit_diff(
     """
     # SOLUTION
     # Only the final logits are relevant for the answer
-    final_logits: Float[torch.Tensor, "batch d_vocab"] = logits[:, -1, :]
+    final_logits: Float[torch.Tensor, "batch d_vocab"] = logits[:, -1, :]  # noqa
     # Get the logits corresponding to the indirect object / subject tokens respectively
-    answer_logits: Float[torch.Tensor, "batch 2"] = final_logits.gather(
+    answer_logits: Float[torch.Tensor, "batch 2"] = final_logits.gather(  # noqa
         dim=-1, index=answer_tokens
     )
     # Find logit difference
@@ -36,8 +36,8 @@ def logits_to_ave_logit_diff(
 
 
 def ioi_metric(
-    logits: Float[torch.Tensor, "batch seq d_vocab"],
-    answer_tokens: Float[torch.Tensor, "batch 2"],
+    logits: Float[torch.Tensor, "batch seq d_vocab"],  # noqa
+    answer_tokens: Float[torch.Tensor, "batch 2"],  # noqa
     corrupted_logit_diff: float,
     clean_logit_diff: float,
 ) -> float:

@@ -391,6 +391,8 @@ statsmodels==0.14.4
     # via plotly-express
 sympy==1.13.1
     # via torch
+tabulate==0.9.0
+    # via user-modelling (pyproject.toml)
 tenacity==9.0.0
     # via plotly
 threadpoolctl==3.5.0

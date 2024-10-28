@@ -3,6 +3,7 @@ from typing import Literal
 import torch
 from sae_lens.toolkit.pretrained_saes_directory import get_pretrained_saes_directory
 from tabulate import tabulate
+from tqdm.auto import tqdm
 
 
 def get_sae_yaml() -> dict:
@@ -52,7 +53,7 @@ def load_gemma_saes(
     params = params + "-it" if instruction_tuned else params
     release = f"gemma-scope-{params}-pt-{type}-canonical"
     saes = {}
-    for layer in layers:
+    for layer in tqdm(layers, desc="Loading SAEs"):
         saes[layer] = load_sae_id(
             release, f"layer_{layer}/width_{width}k/canonical", device, dtype
         )

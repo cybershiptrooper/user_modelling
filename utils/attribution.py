@@ -15,13 +15,19 @@ def compute_sae_activations_and_attributions(
     bwd_cache: ActivationCache | dict,
     hook_points: list[str],
 ):
-    all_layers = list(range(len(saes)))
+    all_layers = list(saes.keys())
     assert len(hook_points) == len(saes), "hook_points must be the same length as saes"
     residual_streams = torch.stack(
-        [fwd_cache[hook_points[layer]].squeeze(0) for layer in all_layers]
+        [
+            fwd_cache[hook_points[layer_index]].squeeze(0)
+            for layer_index, layer in enumerate(all_layers)
+        ]
     )
     gradient_residuals = torch.stack(
-        [bwd_cache[hook_points[layer]].squeeze(0) for layer in all_layers]
+        [
+            bwd_cache[hook_points[layer_index]].squeeze(0)
+            for layer_index, layer in enumerate(all_layers)
+        ]
     )
 
     sae_activations_list = []

@@ -1,6 +1,7 @@
 import transformer_lens as tl
 import torch
 from typing import Callable, Literal
+from tqdm import tqdm
 
 
 def get_cache_fwd_and_bwd(
@@ -25,6 +26,10 @@ def get_cache_fwd_and_bwd(
             hook_points = [
                 f"blocks.{layer}.attn.hook_pattern" for layer in range(model.cfg.n_layers)
             ]
+        else:
+            raise ValueError(
+                f"Invalid hook_points: {hook_points}, can only be 'all', 'resid_pre', 'resid_post', or 'pattern'"
+            )
 
     model.reset_hooks()
     cache = {}
@@ -93,3 +98,29 @@ def get_cache_for_all_hooks(
         tl.ActivationCache(fwd_cache, model),
         tl.ActivationCache(bwd_cache, model),
     )
+
+
+def batched_fwd_cache(
+    model: tl.HookedTransformer,
+    prompts: list[str],
+    batch_size: int = 8,
+    device: torch.device = torch.device("cpu"),
+):
+    cache = {}
+    prompt_tokenized = model.tokenizer(
+        prompts, padding=True, truncation=True, return_tensors="pt", padding_side="left"
+    )["input_ids"]
+
+    for i in tqdm(range(0, len(prompts), batch_size)):
+        torch.cuda.empty_cache()
+        output, cache_batch = model.run_with_cache(
+            prompt_tokenized[i : i + batch_size], return_type="logits"
+        )
+        cache_batch = cache_batch.to(device)
+        for k, v in cache_batch.items():
+            if "resid" in k:
+                if k not in cache:
+                    cache[k] = v.detach().clone()
+                else:
+                    cache[k] = torch.cat([cache[k], v], dim=0)
+    return cache

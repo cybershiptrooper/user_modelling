@@ -11,7 +11,7 @@ def make_all_plots_for_residual_sae_attrs(
     model: HookedTransformer,
     sae_attrs: torch.Tensor,
     prompt: list[str],
-    positions_we_care_about: list[int],
+    positions_we_care_about: list[int] | None = None,
 ):
     ALL_LAYERS = list(range(model.cfg.n_layers))
     # stats of all SAE latent attrs for each token
@@ -30,7 +30,11 @@ def make_all_plots_for_residual_sae_attrs(
         # labels={"x": "Tokens", "y": "Attribution Score"},
     )
 
-    sae_attrs_we_care_about = sae_attrs[:, positions_we_care_about]
+    if positions_we_care_about is not None:
+        sae_attrs_we_care_about = sae_attrs[:, positions_we_care_about]
+    else:
+        sae_attrs_we_care_about = sae_attrs
+
     line(
         sae_attrs_we_care_about.sum(1),
         color=["Layer " + str(layer) for layer in ALL_LAYERS],

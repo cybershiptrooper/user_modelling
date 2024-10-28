@@ -12,7 +12,7 @@ def load_probe(
         subfolder="",
         filename=f"collected_{name}_probe_weights.pt",
         cache_dir=cache_dir,
-        force_download=False,
+        force_download=True,
     )
 
     bias_file = hf_hub_download(
@@ -20,7 +20,7 @@ def load_probe(
         subfolder="",
         filename=f"collected_{name}_probe_biases.pt",
         cache_dir=cache_dir,
-        force_download=False,
+        force_download=True,
     )
 
     weights = torch.load(weights_file, map_location=device)

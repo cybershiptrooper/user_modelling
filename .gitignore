@@ -3,6 +3,8 @@
 *rough*
 .vscode
 *results*
+cache/
+dataset/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -2,6 +2,7 @@ from utils.neel_plotly import line
 import utils.neel_utils as nutils
 import torch
 from transformer_lens import HookedTransformer
+import plotly.graph_objects as go
 # import einops
 # import circuitsvis as cv
 # from IPython.display import Markdown, display
@@ -41,6 +42,110 @@ def make_all_plots_for_residual_sae_attrs(
         title="Per Latent Attribution Scores (sum)",
         # labels={"x": "Tokens", "y": "Attribution Score"},
     )
+
+
+def plot_probe_accuracy_histogram(accs, layer, attribute, n_bins=100):
+    """plot the accuracy histogram for all prompts at a given layer"""
+    # Create single figure
+    fig = go.Figure()
+    total_num_of_prompts = len(accs)
+    # Collect normalized positions where probe is correct for this layer
+    sequence_bin_matrix = torch.zeros((total_num_of_prompts, n_bins))
+
+    for i, acc in enumerate(accs):
+        correct_positions = torch.where(acc[0, layer, 1:] == 1)[0].float()
+        seq_length = acc.shape[-1]
+        normalized_positions = correct_positions / seq_length
+        bin_width = 1.0 / n_bins
+        bin_indices = (normalized_positions / bin_width).floor().long()
+        # Mark 1 for each bin that has at least one correct prediction
+        sequence_bin_matrix[i, bin_indices] = 1
+
+    # Sum across sequences to get counts
+    bin_counts = sequence_bin_matrix.sum(dim=0) / total_num_of_prompts
+    bin_edges = torch.linspace(0, 1, n_bins + 1)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+
+    # Create histogram with the correct counts
+    fig.add_trace(
+        go.Bar(
+            x=bin_centers,
+            y=bin_counts,
+            name=f"Layer {layer}",
+            opacity=0.5,
+            width=bin_width,
+            textposition="auto",
+            hovertemplate="Interval: %{x:.2f}, Count: %{y:.2f}",
+        )
+    )
+
+    # Update layout
+    fig.update_layout(
+        barmode="overlay",
+        title=f"Distribution of {attribute} Probe Predictions",
+        xaxis_title="Normalized Position in Sequence",
+        yaxis_title="Count",
+        height=500,
+        width=800,
+        showlegend=True,
+    )
+
+    fig.show()
+
+
+def plot_logit_density_histogram(probe_logits_loaded, layer, label_map, attribute):
+    """plot the logit density histogram for all prompts at a given layer"""
+    probe_logits_at_layer = []
+    for i in range(len(probe_logits_loaded)):
+        logits_for_prompt = probe_logits_loaded[i][label_map, layer, :]
+        # apply inverse sigmoid
+        # ln(y / (1 - y))
+        logits_for_prompt = torch.log(
+            logits_for_prompt / (1 - logits_for_prompt + 1e-10)
+        )
+        probe_logits_at_layer.append(logits_for_prompt)
+
+    probe_logits_at_layer = torch.cat(probe_logits_at_layer)
+
+    # Create histogram using plotly
+    fig = go.Figure()
+    # Split logits into negative and positive values
+    logits_np = probe_logits_at_layer.cpu().numpy()
+    negative_logits = logits_np[logits_np <= 0]
+    positive_logits = logits_np[logits_np > 0]
+
+    # Add positive logits histogram in default color
+    fig.add_trace(
+        go.Histogram(
+            x=positive_logits,
+            nbinsx=50,
+            name=f"Layer {layer} (positive)",
+            opacity=0.7,
+            histnorm="probability density",
+        )
+    )
+    # Add negative logits histogram in red
+    fig.add_trace(
+        go.Histogram(
+            x=negative_logits,
+            nbinsx=50,
+            name=f"Layer {layer} (negative)",
+            opacity=0.7,
+            histnorm="probability density",
+        )
+    )
+
+    # Update layout
+    fig.update_layout(
+        title=f"Logit Distribution at Layer {layer} for {attribute}",
+        xaxis_title="Logit Value",
+        yaxis_title="Density",
+        height=500,
+        width=800,
+        showlegend=True,
+    )
+
+    fig.show()
 
 
 # def plot_attention_attr(model, attention_attr, tokens, title=""):

@@ -8,7 +8,7 @@ def test_best_or_worst():
     )
     best_prompt = template.get_clean_prompt()
 
-    check = """<start_of_turn>System
+    check = """<start_of_turn>system
 Select the **best** possible option from the choices the user provides. Output only the letter of the option you choose.
 <start_of_turn>user
 What is the capital of France?

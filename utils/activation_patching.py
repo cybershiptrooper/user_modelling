@@ -21,7 +21,6 @@ def make_ablation_hook(
 def patch_resid_at_each_token_pos(
     model: tl.HookedTransformer,
     clean_prompt: str,
-    counterfactual_prompt: str,
     corrupted_cache: dict,
     metric: Callable,
     use_resid_post: bool = False,
@@ -40,7 +39,7 @@ def patch_resid_at_each_token_pos(
     Returns:
         Tensor of shape (n_layers, seq_len) containing patching results
     """
-    seq_len = len(model.to_str_tokens(counterfactual_prompt))
+    seq_len = len(model.to_str_tokens(clean_prompt))
     n_layers = model.cfg.n_layers
     results = torch.zeros(n_layers, seq_len)
     resid_hook_points = [

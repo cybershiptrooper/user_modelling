@@ -43,7 +43,7 @@ class PatchingData:
 
 @dataclass
 class BestOrWorst(PatchingData):
-    template: str = """<start_of_turn>System
+    template: str = """<start_of_turn>system
 Select the **{best_or_worst}** possible option from the choices the user provides. Output only the letter of the option you choose.
 <start_of_turn>user
 {user_prompt}
@@ -67,7 +67,7 @@ class BestOrWorstConstantAnswer(BestOrWorst):
 
 
 class UserTraitComparison(PatchingData):
-    template: str = """<start_of_turn>System
+    template: str = """<start_of_turn>system
 Select the **best** possible option from the choices the user provides. Output only the letter of the option you choose.
 <start_of_turn>user
 {user_prompt}

@@ -105,22 +105,25 @@ def batched_fwd_cache(
     prompts: list[str],
     batch_size: int = 8,
     device: torch.device = torch.device("cpu"),
+    hook_point_substring: str = "resid_post",
+    padding_side: Literal["left", "right"] = "right",
 ):
     cache = {}
-    prompt_tokenized = model.tokenizer(
-        prompts, padding=True, truncation=True, return_tensors="pt", padding_side="left"
-    )["input_ids"]
+    prompt_tokenized = model.to_tokens(
+        prompts, padding_side=padding_side, prepend_bos=True
+    )
 
     for i in tqdm(range(0, len(prompts), batch_size)):
         torch.cuda.empty_cache()
-        output, cache_batch = model.run_with_cache(
+        _, cache_batch = model.run_with_cache(
             prompt_tokenized[i : i + batch_size], return_type="logits"
         )
         cache_batch = cache_batch.to(device)
         for k, v in cache_batch.items():
-            if "resid" in k:
+            if hook_point_substring in k:
                 if k not in cache:
                     cache[k] = v.detach().clone()
                 else:
                     cache[k] = torch.cat([cache[k], v], dim=0)
+        torch.cuda.empty_cache()
     return cache

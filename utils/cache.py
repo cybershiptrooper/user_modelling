@@ -145,7 +145,6 @@ def batched_fwd_cache(
     return tl.ActivationCache(cache, model)
 
 
-
 def make_mean_cache(
     model: tl.HookedTransformer,
     prompts: list[str],

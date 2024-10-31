@@ -50,7 +50,7 @@ def compute_sae_activations_and_attributions(
 
 
 def get_top_k_contributions(
-    CONTRIBUTIONS: Float[torch.Tensor, "batch layer pos d_sae"],  # noqa: F722
+    CONTRIBUTIONS: Float[torch.Tensor, "layer d_latent"],  # noqa: F722
     k: int = 5,
     absolute: bool = True,
 ):
@@ -122,6 +122,7 @@ def compute_attribution_patching_scores_for_hook_points(
     bwd_cache: ActivationCache,
     hook_points: list[str],
     zero_ablation: bool = False,
+    use_corrupt_bwd_cache: bool = False,
 ):
     activations = torch.stack(
         [clean_fwd_cache[hook_point].squeeze(0) for hook_point in hook_points]
@@ -142,7 +143,14 @@ def compute_attribution_patching_scores_for_hook_points(
             attributions.append(gradients[layer] * activations[layer])
         else:
             corrupt_acts = corrupt_activations[layer].to(activations[layer].device)
-            attributions.append(gradients[layer] * (activations[layer] - corrupt_acts))
+            if use_corrupt_bwd_cache:
+                attributions.append(
+                    gradients[layer] * (activations[layer] - corrupt_acts)
+                )
+            else:
+                attributions.append(
+                    gradients[layer] * (corrupt_acts - activations[layer])
+                )
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
     return torch.stack(attributions)
@@ -156,24 +164,44 @@ def compute_model_attribution_patching_scores(
     hook_points: list[str],
     zero_ablation: bool = False,
     metric_needs_cache: bool = False,
+    use_corrupt_bwd_cache: bool = False,
 ):
     _, clean_fwd_cache, clean_bwd_cache = get_cache_fwd_and_bwd(
-        model, clean_prompt, metric=metric, hook_points=hook_points, metric_needs_cache=metric_needs_cache
+        model,
+        clean_prompt,
+        metric=metric,
+        hook_points=hook_points,
+        metric_needs_cache=metric_needs_cache,
     )
     if not zero_ablation:
         _, corrupt_fwd_cache, corrupt_bwd_cache = get_cache_fwd_and_bwd(
-            model, corrupt_prompt, metric=metric, hook_points=hook_points, metric_needs_cache=metric_needs_cache
+            model,
+            corrupt_prompt,
+            metric=metric,
+            hook_points=hook_points,
+            metric_needs_cache=metric_needs_cache,
         )
     else:
         corrupt_fwd_cache = None
 
-    attrs = compute_attribution_patching_scores_for_hook_points(
-        clean_fwd_cache,
-        corrupt_fwd_cache,
-        clean_bwd_cache,
-        hook_points,
-        zero_ablation,
-    )
+    if use_corrupt_bwd_cache:
+        attrs = compute_attribution_patching_scores_for_hook_points(
+            clean_fwd_cache,
+            corrupt_fwd_cache,
+            corrupt_bwd_cache,
+            hook_points,
+            zero_ablation,
+            use_corrupt_bwd_cache=True,
+        )
+    else:
+        attrs = compute_attribution_patching_scores_for_hook_points(
+            clean_fwd_cache,
+            corrupt_fwd_cache,
+            clean_bwd_cache,
+            hook_points,
+            zero_ablation,
+            use_corrupt_bwd_cache=False,
+        )
 
     del corrupt_fwd_cache, corrupt_bwd_cache, clean_fwd_cache, clean_bwd_cache
     if torch.cuda.is_available():
@@ -218,8 +246,9 @@ def attr_patch_head_vector(
     model: tl.HookedTransformer,
     clean_cache: ActivationCache,
     corrupted_cache: ActivationCache,
-    corrupted_grad_cache: ActivationCache,
+    grad_cache: ActivationCache,
     activation_name: Literal["q", "k", "v", "z"],
+    using_corrupt_grad_cache: bool = False,
 ):
     HEAD_NAMES = [
         f"L{l}H{h}"  # noqa
@@ -234,19 +263,19 @@ def attr_patch_head_vector(
     corrupted_head_vector = stack_head_vector_from_cache(
         model, corrupted_cache, activation_name
     )
-    corrupted_grad_head_vector = stack_head_vector_from_cache(
-        model, corrupted_grad_cache, activation_name
+    grad_head_vector = stack_head_vector_from_cache(
+        model, grad_cache, activation_name
     )
-    head_vector_attr = einops.reduce(
-        corrupted_grad_head_vector * (clean_head_vector - corrupted_head_vector),
-        "component batch pos d_head -> component pos",
-        "sum",
-    )
-    print(
-        len(labels),
-        head_vector_attr.shape,
-        clean_head_vector.shape,
-        corrupted_head_vector.shape,
-        corrupted_grad_head_vector.shape,
-    )
+    if using_corrupt_grad_cache:
+        head_vector_attr = einops.reduce(
+            grad_head_vector * (clean_head_vector - corrupted_head_vector),
+            "component batch pos d_head -> component pos",
+            "sum",
+        )
+    else:
+        head_vector_attr = einops.reduce(
+            grad_head_vector * (corrupted_head_vector - clean_head_vector),
+            "component batch pos d_head -> component pos",
+            "sum",
+        )
     return head_vector_attr, labels

@@ -49,25 +49,25 @@ def compute_sae_activations_and_attributions(
     return sae_activations, sae_attributions
 
 
-def get_top_latent_contributions(
-    per_latent_contribution: Float[torch.Tensor, "batch layer pos d_sae"],  # noqa: F722
-    top_k: int = 5,
+def get_top_k_contributions(
+    CONTRIBUTIONS: Float[torch.Tensor, "batch layer pos d_sae"],  # noqa: F722
+    k: int = 5,
     absolute: bool = True,
 ):
     results = []
-    for layer in range(per_latent_contribution.shape[0]):
-        latent_contributions = per_latent_contribution[layer, :]
+    for layer in range(CONTRIBUTIONS.shape[0]):
+        latent_contributions = CONTRIBUTIONS[layer, :]
         abs_latent_contributions = latent_contributions.abs()
         if absolute:
-            top_k_latents = abs_latent_contributions.topk(top_k).indices.tolist()
+            top_k_latents = abs_latent_contributions.topk(k).indices.tolist()
         else:
-            top_k_latents = latent_contributions.topk(top_k).indices.tolist()
+            top_k_latents = latent_contributions.topk(k).indices.tolist()
         for latent_idx in top_k_latents:
             results.append(
                 {
                     "latent_idx": latent_idx,
                     "layer": layer,
-                    "contribution": per_latent_contribution[layer, latent_idx].item(),
+                    "contribution": CONTRIBUTIONS[layer, latent_idx].item(),
                     "abs_contribution": abs_latent_contributions[latent_idx].item(),
                 }
             )
@@ -155,13 +155,14 @@ def compute_model_attribution_patching_scores(
     metric: Callable,
     hook_points: list[str],
     zero_ablation: bool = False,
+    metric_needs_cache: bool = False,
 ):
     _, clean_fwd_cache, clean_bwd_cache = get_cache_fwd_and_bwd(
-        model, clean_prompt, metric=metric, hook_points=hook_points
+        model, clean_prompt, metric=metric, hook_points=hook_points, metric_needs_cache=metric_needs_cache
     )
     if not zero_ablation:
         _, corrupt_fwd_cache, corrupt_bwd_cache = get_cache_fwd_and_bwd(
-            model, corrupt_prompt, metric=metric, hook_points=hook_points
+            model, corrupt_prompt, metric=metric, hook_points=hook_points, metric_needs_cache=metric_needs_cache
         )
     else:
         corrupt_fwd_cache = None
@@ -204,7 +205,7 @@ def stack_head_vector_from_cache(
 ):
     """Stacks the head vectors from the cache from a specific activation (key, query, value or mixed_value (z)) into a single tensor."""
     stacked_head_vectors = torch.stack(
-        [cache[activation_name, l] for l in range(model.cfg.n_layers)], dim=0
+        [cache[activation_name, layer] for layer in range(model.cfg.n_layers)], dim=0
     )
     stacked_head_vectors = einops.rearrange(
         stacked_head_vectors,
@@ -227,7 +228,9 @@ def attr_patch_head_vector(
     ]
     labels = HEAD_NAMES
 
-    clean_head_vector = stack_head_vector_from_cache(model, clean_cache, activation_name)
+    clean_head_vector = stack_head_vector_from_cache(
+        model, clean_cache, activation_name
+    )
     corrupted_head_vector = stack_head_vector_from_cache(
         model, corrupted_cache, activation_name
     )

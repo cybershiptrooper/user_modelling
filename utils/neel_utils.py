@@ -43,11 +43,11 @@ def process_tokens(l, model=None):
     return [process_token(s, model) for s in l]
 
 
-def process_tokens_index(l, model=None):
+def process_tokens_index(l, model=None, **kwargs):
     if model is None:
         model = get_variable_from_caller("model")
     if isinstance(l, str):
-        l = model.to_str_tokens(l)
+        l = model.to_str_tokens(l, **kwargs)
     elif isinstance(l, torch.Tensor) and len(l.shape) > 1:
         l = l.squeeze(0)
     return [f"{process_token(s, model)}/{i}" for i, s in enumerate(l)]

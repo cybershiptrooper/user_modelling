@@ -13,19 +13,21 @@ def make_all_plots_for_residual_sae_attrs(
     sae_attrs: torch.Tensor,
     prompt: list[str],
     positions_we_care_about: list[int] | None = None,
+    prepend_bos: bool = False,
 ):
     ALL_LAYERS = list(range(model.cfg.n_layers))
     # stats of all SAE latent attrs for each token
+    x = nutils.process_tokens_index(prompt, model, prepend_bos=prepend_bos)
     line(
         sae_attrs.sum(-1),
-        x=nutils.process_tokens_index(prompt),
+        x=x,
         color=[str(layer) for layer in ALL_LAYERS],
         title="Per Token Attribution Scores (sum)",
         # labels={"x": "Tokens", "y": "Attribution Score"},
     )
     line(
         sae_attrs.max(-1).values,
-        x=nutils.process_tokens_index(prompt),
+        x=x,
         color=[str(layer) for layer in ALL_LAYERS],
         title="Per Token Attribution Scores (max)",
         # labels={"x": "Tokens", "y": "Attribution Score"},

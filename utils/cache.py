@@ -12,6 +12,7 @@ def get_cache_fwd_and_bwd(
     hook_points: list[str] | Literal["all", "resid_pre", "resid_post", "pattern"],
     device: torch.device = torch.device("cpu"),
     metric_needs_cache: bool = False,
+    padding_side: Literal["left", "right"] = "left",
 ) -> tuple[float, tl.ActivationCache, tl.ActivationCache]:
     if isinstance(hook_points, str):
         if hook_points == "all":
@@ -58,7 +59,7 @@ def get_cache_fwd_and_bwd(
     if isinstance(x, torch.Tensor):
         logits = model(x.clone())
     else:
-        logits = model(x, padding_side="left")
+        logits = model(x, padding_side=padding_side)
     if metric_needs_cache:
         value = metric(cache)
     else:

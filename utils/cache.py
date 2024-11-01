@@ -2,7 +2,6 @@ import transformer_lens as tl
 import torch
 from typing import Callable, Literal
 from tqdm import tqdm
-from typing import Callable
 
 
 def get_cache_fwd_and_bwd(
@@ -152,7 +151,6 @@ def batched_fwd_cache(
     return tl.ActivationCache(cache, model)
 
 
-
 def get_cache_at_last_tok(
     model: tl.HookedTransformer,
     prompts: list[str],
@@ -161,13 +159,11 @@ def get_cache_at_last_tok(
     hook_point_substring: str = "resid_post",
     return_output: bool = False,
 ):
-    '''
+    """
     Cache the activations at the last token of each prompt in the batch.
-    '''
+    """
     cache = {}
-    prompt_tokenized = model.to_tokens(
-        prompts, padding_side="right", prepend_bos=True
-    )
+    prompt_tokenized = model.to_tokens(prompts, padding_side="right", prepend_bos=True)
     last_tok_ids = [
         model.to_tokens(prompts[i], padding_side="right", prepend_bos=True).shape[1] - 1
         for i in range(len(prompts))
@@ -178,20 +174,28 @@ def get_cache_at_last_tok(
 
     def make_hook_fn(pos_slice: list[int]):
         def hook_fn(act, hook):
-            to_cache = (act[torch.arange(act.shape[0]), pos_slice, :]).detach().to(device)
+            to_cache = (
+                (act[torch.arange(act.shape[0]), pos_slice, :]).detach().to(device)
+            )
             if hook.name in cache:
                 cache[hook.name] = torch.cat([cache[hook.name], to_cache], dim=0)
             else:
                 cache[hook.name] = to_cache
+
         return hook_fn
+
     outs = []
     for i in tqdm(range(0, len(prompts), batch_size)):
         torch.cuda.empty_cache()
         hook_fn = make_hook_fn(last_tok_ids[i : i + batch_size])
         caching_hooks = [(hook_point, hook_fn) for hook_point in hook_points]
         with model.hooks(fwd_hooks=caching_hooks):
-            out = model(prompt_tokenized[i : i + batch_size], return_type="logits").to(device)
-            outs.append(out[torch.arange(out.shape[0]), last_tok_ids[i : i + batch_size], :])
+            out = model(prompt_tokenized[i : i + batch_size], return_type="logits").to(
+                device
+            )
+            outs.append(
+                out[torch.arange(out.shape[0]), last_tok_ids[i : i + batch_size], :]
+            )
         torch.cuda.empty_cache()
     if return_output:
         return torch.cat(outs, dim=0), tl.ActivationCache(cache, model)
@@ -203,7 +207,7 @@ def make_mean_cache(
     prompts: list[str],
     batch_size: int = 8,
     device: torch.device = torch.device("cpu"),
-    hook_point_substring: str = "resid_post",
+    hook_point_substring: str | list[str] = "resid_post",
     padding_side: Literal["left", "right"] = "right",
     pos_slice: slice | None = None,
 ):
@@ -211,9 +215,18 @@ def make_mean_cache(
     prompt_tokenized = model.to_tokens(
         prompts, padding_side=padding_side, prepend_bos=True
     )
-    hook_points = [
-        hook.name for hook in model.hook_points() if hook_point_substring in hook.name
-    ]
+    if isinstance(hook_point_substring, str):
+        hook_points = [
+            hook.name for hook in model.hook_points() if hook_point_substring in hook.name
+        ]
+    elif isinstance(hook_point_substring, list):
+        hook_points = []
+        for substring in hook_point_substring:
+            hook_points.extend([
+                hook.name for hook in model.hook_points() if substring in hook.name
+            ])
+    else:
+        raise ValueError(f"Invalid hook_point_substring: {hook_point_substring}")
 
     def hook_fn(act, hook):
         if pos_slice is None:

@@ -209,31 +209,46 @@ def compute_model_attribution_patching_scores(
     return attrs
 
 
+
 def compute_attention_attribution_for_prompt(
     model: tl.HookedTransformer,
     prompt: str,
     metric: Callable,
     return_acts: bool = False,
+    metric_needs_cache: bool = False,
+    cache_hook_point: str | None = None,
+    layers: list[int] | None = None,
+    device: str = "cpu",
 ):
+    if layers is None:
+        layers = list(range(model.cfg.n_layers))
     attn_hook_points = [
         f"blocks.{layer}.attn.hook_pattern" for layer in range(model.cfg.n_layers)
     ]
+    if metric_needs_cache:
+        assert cache_hook_point is not None, "cache_hook_point must be provided if metric_needs_cache is True"
+        hook_points = attn_hook_points + [cache_hook_point]
+    else:
+        hook_points = attn_hook_points
     _, fwd_cache, bwd_cache = get_cache_fwd_and_bwd(
-        model, prompt, metric=metric, hook_points=attn_hook_points
+        model, prompt, metric=metric, hook_points=hook_points, metric_needs_cache=metric_needs_cache
     )
-    acts = fwd_cache.stack_activation("attn").squeeze()
-    grads = bwd_cache.stack_activation("attn").squeeze()
+    acts = fwd_cache.stack_activation("attn", layer=max(layers)).squeeze().to(device)
+    grads = bwd_cache.stack_activation("attn", layer=max(layers)).squeeze().to(device)
+    torch.cuda.empty_cache()
     if return_acts:
         return acts, (acts * grads).squeeze()
     return (acts * grads).squeeze()
 
 
 def stack_head_vector_from_cache(
-    model, cache, activation_name: Literal["q", "k", "v", "z"]
+    model, cache, activation_name: Literal["q", "k", "v", "z"], layers: list[int] | None = None
 ):
     """Stacks the head vectors from the cache from a specific activation (key, query, value or mixed_value (z)) into a single tensor."""
+    if layers is None:
+        layers = list(range(model.cfg.n_layers))
     stacked_head_vectors = torch.stack(
-        [cache[activation_name, layer] for layer in range(model.cfg.n_layers)], dim=0
+        [cache[activation_name, layer] for layer in layers], dim=0
     )
     stacked_head_vectors = einops.rearrange(
         stacked_head_vectors,
@@ -249,23 +264,25 @@ def attr_patch_head_vector(
     grad_cache: ActivationCache,
     activation_name: Literal["q", "k", "v", "z"],
     using_corrupt_grad_cache: bool = False,
+    layers: list[int] | None = None,
+    device: str = "cpu",
 ):
+    if layers is None:
+        layers = list(range(model.cfg.n_layers))
     HEAD_NAMES = [
         f"L{l}H{h}"  # noqa
-        for l in range(model.cfg.n_layers)  # noqa
+        for l in layers  # noqa
         for h in range(model.cfg.n_heads)  # noqa
     ]
     labels = HEAD_NAMES
 
     clean_head_vector = stack_head_vector_from_cache(
-        model, clean_cache, activation_name
-    )
+        model, clean_cache, activation_name, layers
+    ).to(device)
     corrupted_head_vector = stack_head_vector_from_cache(
-        model, corrupted_cache, activation_name
-    )
-    grad_head_vector = stack_head_vector_from_cache(
-        model, grad_cache, activation_name
-    )
+        model, corrupted_cache, activation_name, layers
+    ).to(device)
+    grad_head_vector = stack_head_vector_from_cache(model, grad_cache, activation_name, layers).to(device)
     if using_corrupt_grad_cache:
         head_vector_attr = einops.reduce(
             grad_head_vector * (clean_head_vector - corrupted_head_vector),

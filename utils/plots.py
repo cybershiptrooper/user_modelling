@@ -1,8 +1,11 @@
-from utils.neel_plotly import line
+from utils.neel_plotly import line, imshow
 import utils.neel_utils as nutils
 import torch
 from transformer_lens import HookedTransformer
 import plotly.graph_objects as go
+import einops
+from IPython.display import Markdown, display
+
 # import einops
 # import circuitsvis as cv
 # from IPython.display import Markdown, display
@@ -148,6 +151,51 @@ def plot_logit_density_histogram(probe_logits_loaded, layer, label_map, attribut
     )
 
     fig.show()
+
+
+def plot_head_vector_attribution(head_vector_attrs, head_vector_labels, activation_name_full, layers, heads, LABELED_TOKENS, sort = True):
+    display(Markdown(f"#### {activation_name_full} Head Vector Attribution Patching"))
+    imshow(
+        head_vector_attrs,
+        y=head_vector_labels,
+        x = LABELED_TOKENS,
+        yaxis="Component",
+        xaxis="Position",
+        title=f"{activation_name_full} Attribution Patching",
+    )
+    sum_head_vector_attr = einops.reduce(
+        head_vector_attrs,
+        "(layer head) pos -> layer head",
+        "sum",
+        layer=len(layers),
+        head=len(heads),
+    )
+    sorted_sum_head_vector_attr = sum_head_vector_attr.sort(dim=-1).values
+    head_indices = sum_head_vector_attr.sort(dim=-1).indices
+
+    print(sorted_sum_head_vector_attr.shape, sum_head_vector_attr.shape)
+    imshow(
+        sorted_sum_head_vector_attr if sort else sum_head_vector_attr,
+        yaxis="Layer",
+        xaxis="Head Index",
+        title=f"{activation_name_full} Attribution Patching Sum Over All Pos",
+        # hover_text = [[f"Head {h}" for h in head_indices[l]] for l in range(len(layers))]
+    )
+    sum_pos_vector_attr = einops.reduce(
+        head_vector_attrs,
+        "(layer head) pos -> pos",
+        "sum",
+        layer=len(layers),
+        head=len(heads),
+    )
+    line(
+        sum_pos_vector_attr,
+        x = LABELED_TOKENS,
+        yaxis="Contribution",
+        xaxis="Position",
+        title=f"{activation_name_full} Attribution Patching Sum Over All Layers and Heads",
+    )
+
 
 
 # def plot_attention_attr(model, attention_attr, tokens, title=""):

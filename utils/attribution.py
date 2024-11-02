@@ -270,14 +270,6 @@ def attr_patch_head_vector(
 ):
     if layers is None:
         layers = list(range(model.cfg.n_layers))
-    if heads is None:
-        heads = list(range(model.cfg.n_heads))
-    HEAD_NAMES = [
-        f"L{l}H{h}"  # noqa
-        for l in layers  # noqa
-        for h in heads  # noqa
-    ]
-    labels = HEAD_NAMES
 
     clean_head_vector = stack_head_vector_from_cache(
         model, clean_cache, activation_name, layers
@@ -298,4 +290,14 @@ def attr_patch_head_vector(
             "component batch pos d_head -> component pos",
             "sum",
         )
+
+    if heads is None:
+        heads = list(range(model.cfg.n_heads))
+    HEAD_NAMES = [
+        f"L{l}H{h}"  # noqa
+        for l in layers  # noqa
+        for h in heads  # noqa
+    ]
+    labels = HEAD_NAMES
+
     return head_vector_attr, labels

@@ -265,14 +265,17 @@ def attr_patch_head_vector(
     activation_name: Literal["q", "k", "v", "z"],
     using_corrupt_grad_cache: bool = False,
     layers: list[int] | None = None,
+    heads: list[int] | None = None,
     device: str = "cpu",
 ):
     if layers is None:
         layers = list(range(model.cfg.n_layers))
+    if heads is None:
+        heads = list(range(model.cfg.n_heads))
     HEAD_NAMES = [
         f"L{l}H{h}"  # noqa
         for l in layers  # noqa
-        for h in range(model.cfg.n_heads)  # noqa
+        for h in heads  # noqa
     ]
     labels = HEAD_NAMES
 

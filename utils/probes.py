@@ -123,7 +123,10 @@ def load_dataset_for_model(
 
                 chat_history = parse_chat_string(text)
                 if chat_history and isinstance(chat_history, (list, tuple)):
-                  texts.append(model.tokenizer.apply_chat_template(chat_history, tokenize=False, add_generation_prompt=True))
+                  text = model.tokenizer.apply_chat_template(chat_history, tokenize=False, add_generation_prompt=True)[5:]
+                  if not control_probe:
+                    text = text[:-35]
+                  texts.append(text)
                   labels.append(label_map[label])
 
     return texts, labels

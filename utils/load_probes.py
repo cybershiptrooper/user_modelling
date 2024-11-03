@@ -6,9 +6,12 @@ def load_probe(
     name: str,
     cache_dir: str = "./cache",
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    use_it = True,
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    project = "thorsley/user_model_probes" if not use_it else "thorsley/user_modelling_probes_gemma-9b-it"
+    print("loading from", project)
     weights_file = hf_hub_download(
-        "thorsley/user_model_probes",
+        project,
         subfolder="",
         filename=f"collected_{name}_probe_weights.pt",
         cache_dir=cache_dir,
@@ -16,7 +19,7 @@ def load_probe(
     )
 
     bias_file = hf_hub_download(
-        "thorsley/user_model_probes",
+        project,
         subfolder="",
         filename=f"collected_{name}_probe_biases.pt",
         cache_dir=cache_dir,

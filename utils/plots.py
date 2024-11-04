@@ -5,6 +5,7 @@ from transformer_lens import HookedTransformer
 import plotly.graph_objects as go
 import einops
 from IPython.display import Markdown, display
+from utils.substrings import has_gendered_substr
 
 # import einops
 # import circuitsvis as cv
@@ -153,12 +154,20 @@ def plot_logit_density_histogram(probe_logits_loaded, layer, label_map, attribut
     fig.show()
 
 
-def plot_head_vector_attribution(head_vector_attrs, head_vector_labels, activation_name_full, layers, heads, LABELED_TOKENS, sort = True):
+def plot_head_vector_attribution(
+    head_vector_attrs,
+    head_vector_labels,
+    activation_name_full,
+    layers,
+    heads,
+    LABELED_TOKENS,
+    sort=True,
+):
     display(Markdown(f"#### {activation_name_full} Head Vector Attribution Patching"))
     imshow(
         head_vector_attrs,
         y=head_vector_labels,
-        x = LABELED_TOKENS,
+        x=LABELED_TOKENS,
         yaxis="Component",
         xaxis="Position",
         title=f"{activation_name_full} Attribution Patching",
@@ -190,12 +199,162 @@ def plot_head_vector_attribution(head_vector_attrs, head_vector_labels, activati
     )
     line(
         sum_pos_vector_attr,
-        x = LABELED_TOKENS,
+        x=LABELED_TOKENS,
         yaxis="Contribution",
         xaxis="Position",
         title=f"{activation_name_full} Attribution Patching Sum Over All Layers and Heads",
     )
 
+
+def get_contributions(
+    all_attn_AP_scores,
+    layer,
+    head,
+    probe_layer,
+    skipped_prompts,
+    all_labelled_tokens,
+    texts,
+    labels,
+):
+    contribution_list = {}
+    for attn_score in all_attn_AP_scores:
+        for key, value in attn_score.items():
+            head_to_use = head // 2 if key in ["k", "v"] else head
+            n_heads = 8 if key in ["k", "v"] else 16
+            deconcatenated = einops.rearrange(
+                value,
+                "(layer head) pos -> layer head pos",
+                layer=probe_layer + 1,
+                head=n_heads,
+            )
+            if key not in contribution_list:
+                contribution_list[key] = []
+            contribution_list[key].append(deconcatenated[layer, head_to_use])
+
+    for key, list_of_contributions in contribution_list.items():
+        fig = go.Figure()
+        i = 0
+        for contribution in list_of_contributions:
+            while i in skipped_prompts:
+                i += 1
+            if i > 8:
+                break
+
+            labeled_tokens = all_labelled_tokens[i]
+            # Add hover text showing the token at each position
+            fig.add_trace(
+                go.Scatter(
+                    x=torch.linspace(0, 1, len(contribution)),
+                    y=contribution.to(float),
+                    mode="lines",  # Added markers to make hovering easier
+                    name=f"Prompt {i}",
+                    text=labeled_tokens,  # Add tokens as hover text
+                    hovertemplate="Position: %{x:.2f}<br>"
+                    + "Attribution: %{y:.4f}<br>"
+                    + "Token: %{text}<br>"
+                    + f"Has gendered substr: {has_gendered_substr(texts[i])}<br>"
+                    + f"Label: {labels[i]}<br>"
+                    + "<extra></extra>",  # Removes trace name from hover
+                )
+            )
+            i += 1
+        fig.update_layout(
+            title=f"{key} Attribution of Head {head} for Layer {layer}",
+            xaxis_title="Normalised Position",
+            yaxis_title="Attribution",
+        )
+        fig.show()
+
+
+def plot_top_head_path_attrs(
+    mean_head_path_attrs, mean_head_out_attrs, start_labels, end_labels
+):
+    head_out_values, head_out_indices = mean_head_out_attrs.abs().sort(descending=True)
+    top_head_indices = head_out_indices[:22].sort().values
+    top_end_indices = []
+    top_end_labels = []
+    top_start_indices = []
+    top_start_labels = []
+    for i in top_head_indices:
+        i = i.item()
+        top_start_indices.append(i)
+        top_start_labels.append(start_labels[i])
+        for j in range(3):
+            top_end_indices.append(3 * i + j)
+            top_end_labels.append(end_labels[3 * i + j])
+    line(head_out_values)
+    imshow(
+        mean_head_path_attrs[top_end_indices, :][:, top_start_indices],
+        y=top_end_labels,
+        yaxis="Path End (Head Input)",
+        x=top_start_labels,
+        xaxis="Path Start (Head Output)",
+        title="Head Path Attribution Patching (Filtered for Top Heads)",
+    )
+    return top_end_indices, top_start_indices, top_end_labels, top_start_labels
+
+
+def plot_qkv_head_path_attrs(
+    mean_head_path_attrs,
+    top_end_indices,
+    top_start_indices,
+    top_end_labels,
+    top_start_labels,
+):
+    for j, composition_type in enumerate(["Query", "Key", "Value"]):
+        imshow(
+            mean_head_path_attrs[top_end_indices, :][:, top_start_indices][j::3],
+            y=top_end_labels[j::3],
+            yaxis="Path End (Head Input)",
+            x=top_start_labels,
+            xaxis="Path Start (Head Output)",
+            title=f"Head Path to {composition_type} Attribution Patching (Filtered for Top Heads)",
+        )
+
+
+def plot_interesting_heads(
+    mean_head_path_attrs, interesting_heads: list[tuple[int, int]], probe_layer
+):
+    '''
+    Plot the interesting heads
+    Args:
+        mean_head_path_attrs: The mean head path attributes
+        interesting_heads: The interesting heads to plot (list[tuple[layer, head_index]])
+        probe_layer: The layer of the probe used for attribution patching
+    '''
+    HEAD_NAMES = [f"L{l}H{h}" for l in range(probe_layer + 1) for h in range(16)]
+    interesting_heads = [
+        layer * 16 + head_index for layer, head_index in interesting_heads
+    ]
+    interesting_head_labels = [HEAD_NAMES[i] for i in interesting_heads]
+    for head_index, label in zip(interesting_heads, interesting_head_labels):
+        in_paths = mean_head_path_attrs[3 * head_index : 3 * head_index + 3]
+        out_paths = mean_head_path_attrs[:, head_index]
+        out_paths = einops.rearrange(
+            out_paths, "(layer_head qkv) -> qkv layer_head", qkv=3
+        )
+        all_paths = torch.cat([in_paths, out_paths], dim=0)
+        all_paths = einops.rearrange(
+            all_paths,
+            "path_type (layer head) -> path_type layer head",
+            layer=probe_layer + 1,
+            head=16,
+        )
+        imshow(
+            all_paths,
+            facet_col=0,
+            facet_labels=[
+                "Query (In)",
+                "Key (In)",
+                "Value (In)",
+                "Query (Out)",
+                "Key (Out)",
+                "Value (Out)",
+            ],
+            title=f"Input and Output Paths for head {label}",
+            yaxis="Layer",
+            xaxis="Head",
+        )
 
 
 # def plot_attention_attr(model, attention_attr, tokens, title=""):

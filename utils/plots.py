@@ -215,6 +215,7 @@ def get_contributions(
     all_labelled_tokens,
     texts,
     labels,
+    max_prompts_to_show=8
 ):
     contribution_list = {}
     for attn_score in all_attn_AP_scores:
@@ -237,7 +238,7 @@ def get_contributions(
         for contribution in list_of_contributions:
             while i in skipped_prompts:
                 i += 1
-            if i > 8:
+            if i > max_prompts_to_show:
                 break
 
             labeled_tokens = all_labelled_tokens[i]
@@ -264,6 +265,95 @@ def get_contributions(
             yaxis_title="Attribution",
         )
         fig.show()
+
+
+def get_contributions_for_each_layer(
+    all_attn_AP_scores,
+    probe_layer,
+    skipped_prompts,
+    all_labelled_tokens,
+    texts,
+    labels,
+    key = "z",
+    max_prompts_to_show=8,
+    layers: list[int] = None,
+):
+    contribution_list = {}
+    for attn_score in all_attn_AP_scores:
+        n_heads = 8 if key in ["k", "v"] else 16
+        deconcatenated = einops.rearrange(
+            attn_score[key],
+            "(layer head) pos -> layer head pos",
+            layer=probe_layer + 1,
+            head=n_heads,
+        )
+        contributions_per_layer_and_pos = deconcatenated.sum(1)
+        layers = range(contributions_per_layer_and_pos.shape[0]) if layers is None else layers
+        for layer in layers:
+            if layer not in contribution_list:
+                contribution_list[layer] = []
+            contribution_list[layer].append(contributions_per_layer_and_pos[layer])
+    
+
+    for layer, contributions in contribution_list.items():
+        fig = go.Figure()
+        i = 0
+        for contribution in contributions:
+            while i in skipped_prompts:
+                i += 1
+            if i > max_prompts_to_show:
+                break
+            labeled_tokens = all_labelled_tokens[i]
+            fig.add_trace(
+                go.Scatter(
+                    x=torch.linspace(0, 1, len(contribution)),
+                    y=contribution.to(float),
+                    mode="lines",
+                    name=f"Prompt {i}",
+                    text=labeled_tokens,
+                    hovertemplate="Position: %{x:.2f}<br>"
+                    + "Attribution: %{y:.4f}<br>"
+                    + "Token: %{text}<br>"
+                    + f"Has gendered substr: {has_gendered_substr(texts[i])}<br>"
+                    + f"Label: {labels[i]}<br>"
+                    + "<extra></extra>",
+                )
+            )
+            i += 1
+        fig.update_layout(
+            title=f"{key} Contributions for Layer {layer}",
+            xaxis_title="Normalised Position",
+            yaxis_title="Attribution",
+        )
+        fig.show()
+
+
+def get_contributions_a_prompt(
+    attn_AP_score,
+    probe_layer,
+    labelled_tokens,
+    key = "z",
+    layers: list[int] | None= None,
+    remove_suffix: bool = True,
+):
+    n_heads = 8 if key in ["k", "v"] else 16
+    contribs_per_layer = []
+    deconcatenated = einops.rearrange(
+        attn_AP_score[key],
+        "(layer head) pos -> layer head pos",
+        layer=probe_layer + 1,
+        head=n_heads,
+    )
+    contributions_per_layer_and_pos = deconcatenated.sum(1)
+    layers = range(contributions_per_layer_and_pos.shape[0]) if layers is None else layers
+    for layer in layers:
+        if remove_suffix:
+            contribs_per_layer.append(contributions_per_layer_and_pos[layer].to(float)[:-9])
+        else:
+            contribs_per_layer.append(contributions_per_layer_and_pos[layer].to(float))
+    labelled_tokens = labelled_tokens[:-9] if remove_suffix else labelled_tokens
+    line(contribs_per_layer, x=labelled_tokens, title=f"{key} Contributions for Layer {probe_layer}", color=[str(layer) for layer in layers])
+    return contribs_per_layer, labelled_tokens
 
 
 def plot_top_head_path_attrs(
